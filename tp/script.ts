@@ -1,51 +1,94 @@
-// Fonction pour effectuer une requête AJAX
-async function fetchData(url: string): Promise<any> {
-    const response = await fetch(url);
-    return await response.json();
-  }
-  
-// Fonction pour fusionner et injecter les données dans le DOM
-function renderData(users: any[], posts: any[]): void {
-    // Exemple de logique de fusion : concaténation des noms des utilisateurs et des titres des messages
-    const mergedData = users.map((user, index) => {
-      return `${user.name} - ${posts[index].title}`;
-    }).join('<br>');
-  
-    // Injectez les données dans le DOM
-    const appContainer = document.getElementById('app');
-    if (appContainer) {
-      appContainer.innerHTML = mergedData;
-    }
-  }
-  
-  // Fonction pour filtrer les résultats
-  function filterResults(keyword: string): void {
-    // Implémentez la logique de filtrage ici
-  }
-  
-  // Appel des requêtes AJAX
-  async function loadData(): Promise<void> {
-    try {
-      const users = await fetchData('https://jsonplaceholder.typicode.com/users');
-      const posts = await fetchData('https://jsonplaceholder.typicode.com/posts');
-  
-      renderData(users, posts);
-    } catch (error) {
-      console.error('Erreur lors du chargement des données :', error);
-    }
-  }
-  
-  // Appel de la fonction loadData au chargement de la page
-  document.addEventListener('DOMContentLoaded', () => {
-    loadData();
+declare const axios: any;
+
+interface User {
+  id: number;
+  name: string;
+  username: string;
+  email: string;
+}
+
+interface Post {
+  userId: number;
+  id: number;
+  title: string;
+  body: string;
+}
+
+interface UserWithPosts extends User {
+  posts: Post[];
+}
+
+async function getUsers(): Promise<User[]> {
+  const response = await axios.get('https://jsonplaceholder.typicode.com/users');
+  return response.data;
+}
+
+async function getPosts(): Promise<Post[]> {
+  const response = await axios.get('https://jsonplaceholder.typicode.com/posts');
+  return response.data;
+}
+
+async function displayData(usersWithPosts: UserWithPosts[]): Promise<void> {
+  const container = document.getElementById('user-posts') as HTMLDivElement;
+  container.innerHTML = '';
+
+  usersWithPosts.forEach(user => {
+    const userColumn = document.createElement('div');
+    userColumn.className = 'col-md-4 card-column';
+    
+    const userCard = document.createElement('div');
+    userCard.className = 'card';
+    
+    userCard.innerHTML = `
+      <div class="card-body">
+        <h5 class="card-title">${user.name}</h5>
+        <h6 class="card-text text-secondary">${user.email}</h6>
+        <p class="text-warning">Titre des articles rédigés:</p>
+        <ul>
+          ${user.posts.map(post => `<li>${post.title}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+    
+    userColumn.appendChild(userCard);
+    container.appendChild(userColumn);
   });
-  
-  // Écouteur d'événement pour le bouton de recherche
-  document.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    if (target.id === 'searchButton') {
-      const searchInput = document.getElementById('searchInput') as HTMLInputElement;
-      const keyword = searchInput.value.trim().toLowerCase();
-      filterResults(keyword);
-    }
-  });
+}
+
+async function loadData() {
+  try {
+    const [users, posts] = await Promise.all([getUsers(), getPosts()]);
+    const usersWithPosts = users.map(user => ({
+      ...user,
+      posts: posts.filter(post => post.userId === user.id),
+    }));
+    displayData(usersWithPosts);
+  } catch (error) {
+    console.error('There was an error fetching the data', error);
+  }
+}
+
+async function filterData() {
+  const titleInput = document.getElementById('search-title') as HTMLInputElement;
+  const authorInput = document.getElementById('search-author') as HTMLInputElement;
+
+  const titleQuery = titleInput.value.toLowerCase();
+  const authorQuery = authorInput.value.toLowerCase();
+
+  const [users, posts] = await Promise.all([getUsers(), getPosts()]);
+
+  const filteredPosts = posts.filter(post => post.title.toLowerCase().includes(titleQuery));
+
+  const usersWithFilteredPosts = users
+    .map(user => ({
+      ...user,
+      posts: filteredPosts.filter(post => post.userId === user.id),
+    }))
+    .filter(user => user.name.toLowerCase().includes(authorQuery) && user.posts.length > 0);
+
+  displayData(usersWithFilteredPosts);
+}
+
+document.getElementById('search-button')!.addEventListener('click', filterData);
+
+loadData();
